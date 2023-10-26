@@ -1,6 +1,6 @@
-# Sandhi-Vicchedika - Sanskrit Sandhi Splitter (Powered by Sanskrit Heritage Engine)
+# Pada-Vishleshika - Sanskrit Morphological Analyser (Powered by Sanskrit Heritage Engine)
 
-The package contains binaries from [Sanskrit Heritage Engine (SH)](https://sanskrit.inria.fr/) and [Samsaadhanii Tools (SCL)](https://sanskrit.uohyd.ac.in/scl/) that aid and perform the morphological analysis of given word(s). The following are the constituents:
+The package contains binaries from [Sanskrit Heritage Engine (SH)](https://sanskrit.inria.fr/) that aid and perform the morphological analysis of given word(s). The following are the constituents:
 
 1. interface2 &rarr; binary file from SH that performs morphological analysis and is invoked from pada\_vishleshika.py and sandhi\_vicchedika.py
 2. data/ &rarr; contains all the required .rem files (binaries for interface2)
