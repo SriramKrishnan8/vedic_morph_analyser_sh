@@ -5,8 +5,8 @@ The package contains binaries from [Sanskrit Heritage Engine (SH)](https://sansk
 1. interface2 &rarr; binary file from SH that performs morphological analysis and is invoked from pada\_vishleshika.py and sandhi\_vicchedika.py
 2. data/ &rarr; contains all the required .rem files (binaries for interface2)
 3. pada\_vishleshika.py &rarr; a python wrapper for morphological analysis of SH
-6. run.sh &rarr; sample commands to perform the morphological analysis task with various parameters
-7. sample\_input\_text\_dev.txt, sample\_input\_text\_iast.txt, sample\_input\_pada\_dev.txt &rarr; sample input files
+4. run.sh &rarr; sample commands to perform the morphological analysis task with various parameters
+5. sample\_input\_text\_dev.txt, sample\_input\_text\_iast.txt, sample\_input\_pada\_dev.txt &rarr; sample input files
 
 ## Pre-requisites
 

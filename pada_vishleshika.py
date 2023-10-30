@@ -394,8 +394,6 @@ def run_sh_sequentially(input_list, cgi_file, input_encoding, lex, us,
     output_list = []
     for i in tqdm(range(len(input_list))):
         input_word = input_list[i].strip()
-        
-        # print(input_word)
 
         morph_analysis = run_sh_text(
             cgi_file, input_word, input_encoding, lex, us, output_encoding,
@@ -444,7 +442,11 @@ def run_sh_file(cgi_file, input_file, output_file, input_encoding, lex="MW",
         )
     
     with open(output_file, 'w', encoding='utf-8') as out_file:
-        json.dump(output_list, out_file, ensure_ascii=False)
+#        if the output is required to be in JSON format
+#        json.dump(output_list, out_file, ensure_ascii=False)
+#        if the output is required to be in a list format
+        output_contents = [ json.dumps(item, ensure_ascii=False) for item in output_list ]
+        out_file.write("\n".join(output_contents))
 
 
 def main():
