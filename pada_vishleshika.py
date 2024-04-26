@@ -87,6 +87,7 @@ def input_transliteration(input_text, input_enc):
     
     if input_enc == "DN":
         trans_input = dt.dev2wx(input_text)
+        trans_input = trans_input.replace("ळ", "d")
         trans_enc = "WX"
     elif input_enc == "RN":
         trans_input = dt.iast2wx(input_text)
@@ -153,20 +154,24 @@ def run_sh(cgi_file, input_text, input_encoding, lex="MW", us="f",
     query_string = "QUERY_STRING=\"" + "&".join(env_vars) + "\""
     command = query_string + " " + cgi_file
     
-    p = sp.Popen(command, stdout=sp.PIPE, shell=True)
     try:
+        p = sp.Popen(command, stdout=sp.PIPE, stderr=sp.PIPE, shell=True)
         outs, errs = p.communicate(timeout=time_out)
-        result = outs.decode('utf-8')
-        st = "Success"
     except sp.TimeoutExpired:
-        os.kill(p.pid)
+        parent = psutil.Process(p.pid)
+        for child in parent.children(recursive=True):
+            child.terminate()
+            parent.terminate()
         result = ""
-        st = "Timeout"
+        status = "Timeout"
     except Exception as e:
         result = ""
-        st = "Error"
-
-    return result, st
+        status = "Failure"
+    else:
+        result = outs.decode('utf-8')
+        status = "Success"
+    
+    return result, status
 
 
 def identify_stem_root(d_stem, base, d_morph, i_morphs):
@@ -249,6 +254,7 @@ def get_morphological_analyses(input_out_enc, result_json, out_enc):
         analysis_json["status"] = "success"
         analysis_json["segmentation"] = words
         analysis_json["morph"] = new_morphs
+        analysis_json["source"] = "SH"
 
     return analysis_json
     
