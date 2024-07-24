@@ -22,6 +22,11 @@ segmentation_modes = {
     "best" : "l"
 }
 
+text_types = {
+    "word" : "f",
+    "sent" : "t"
+}
+
 cgi_file = "./interface2"
 
 
@@ -131,7 +136,7 @@ def output_transliteration(output_text, output_enc):
 
 
 def run_sh(cgi_file, input_text, input_encoding, lex="MW", us="f",
-           output_encoding="roma", segmentation_mode="b", stemmer="t"):
+           output_encoding="roma", segmentation_mode="b", text_type="t", stemmer="t"):
     """ Runs the cgi file with a given word.  
         
         Returns a JSON
@@ -144,6 +149,7 @@ def run_sh(cgi_file, input_text, input_encoding, lex="MW", us="f",
     env_vars = [
         "lex=" + lex,
         "us=" + us,
+        "st=" + text_type,
         "font=" + out_enc,
         "t=" + input_encoding,
         "text=" + input_text,#.replace(" ", "+"),
@@ -259,7 +265,7 @@ def get_morphological_analyses(input_out_enc, result_json, out_enc):
     return analysis_json
     
 
-def handle_result(result, input_word, output_enc, issue):
+def handle_result(result, input_word, output_enc, issue, text_type):
     """ Returns the results from the JSON
     """
     
@@ -281,7 +287,7 @@ def handle_result(result, input_word, output_enc, issue):
     if seg:
         if "error" in seg[0]:
             status = "Error"
-        elif "#" in seg[0]:
+        elif "#" in seg[0] and text_type == "w":
             status = "Unrecognized"
         else:
             status = "Success"
@@ -314,7 +320,7 @@ def handle_result(result, input_word, output_enc, issue):
 
 def run_sh_text(cgi_file, input_word, input_encoding, lex="MW",
                 us="f", output_encoding="roma",
-                segmentation_mode="b", stemmer="t"):
+                segmentation_mode="b", text_type="t", stemmer="t"):
     """ Handles morphological analyses for the given input word
     """
     
@@ -333,14 +339,14 @@ def run_sh_text(cgi_file, input_word, input_encoding, lex="MW",
 
         result, issue = run_sh(
             cgi_file, trans_input, trans_enc, lex, us, output_encoding, 
-            segmentation_mode, stemmer
+            segmentation_mode, text_type, stemmer
         )
     except Exception as e:
         result = ""
         issue = "input"
     
     morph_analysis = handle_result(
-        result, input_word_out_enc, output_encoding, issue
+        result, input_word_out_enc, output_encoding, issue, text_type
     )
 
     return morph_analysis
@@ -363,7 +369,7 @@ def process_words_subset(input_list, cgi_file, input_encoding, lex, us,
 
 
 def run_sh_parallely(input_list, cgi_file, input_encoding, lex, us,
-                     output_encoding, segmentation_mode, stemmer):
+                     output_encoding, segmentation_mode, text_type, stemmer):
     """ """
     
     num_processes = mp.cpu_count()
@@ -377,7 +383,7 @@ def run_sh_parallely(input_list, cgi_file, input_encoding, lex, us,
     for chunk in chunks:
         cur_args = (
             chunk, cgi_file, input_encoding, lex, us, output_encoding,
-            segmentation_mode, stemmer, 0, len(chunk), result_queue
+            segmentation_mode, text_type, stemmer, 0, len(chunk), result_queue
         )
         process = mp.Process(target=process_words_subset, args=cur_args)
         processes.append(process)
@@ -394,7 +400,7 @@ def run_sh_parallely(input_list, cgi_file, input_encoding, lex, us,
     
 
 def run_sh_sequentially(input_list, cgi_file, input_encoding, lex, us,
-                        output_encoding, segmentation_mode, stemmer):
+                        output_encoding, segmentation_mode, text_type, stemmer):
     """ """
     
     output_list = []
@@ -403,7 +409,7 @@ def run_sh_sequentially(input_list, cgi_file, input_encoding, lex, us,
 
         morph_analysis = run_sh_text(
             cgi_file, input_word, input_encoding, lex, us, output_encoding,
-            segmentation_mode, stemmer
+            segmentation_mode, text_type, stemmer
         )
         
         output_list.append(morph_analysis)
@@ -413,7 +419,7 @@ def run_sh_sequentially(input_list, cgi_file, input_encoding, lex, us,
 
 def run_sh_file(cgi_file, input_file, output_file, input_encoding, lex="MW",
                 us="f", output_encoding="roma", segmentation_mode="b",
-                stemmer="t"):
+                text_type="t", stemmer="t"):
     """ Handles morphological analyses for all the sentences in a file
     """
 
@@ -439,12 +445,12 @@ def run_sh_file(cgi_file, input_file, output_file, input_encoding, lex="MW",
     if parallel:
         output_list = run_sh_parallely(
             input_list, cgi_file, input_encoding, lex, us, output_encoding,
-            segmentation_mode, stemmer
+            segmentation_mode, text_type, stemmer
         )
     else:
         output_list = run_sh_sequentially(
             input_list, cgi_file, input_encoding, lex, us, output_encoding,
-            segmentation_mode, stemmer
+            segmentation_mode, text_type, stemmer
         )
     
     with open(output_file, 'w', encoding='utf-8') as out_file:
@@ -471,6 +477,11 @@ def main():
         "output_enc", default="roma",
         choices=["deva", "roma", "WX"],
         help="output encoding"
+    )
+    parser.add_argument(
+        "text_type", default="sent",
+        choices=["word", "sent"],
+        help="input text type"
     )
     parser.add_argument(
         "seg_mode", default="first",
@@ -501,6 +512,7 @@ def main():
     input_enc = args.input_enc
     output_enc = args.output_enc
     seg_mode = segmentation_modes.get(args.seg_mode, "f")
+    txt_type = text_types.get(args.text_type, "t")
     
     if args.input_file:
         i_file = args.input_file.name
@@ -508,13 +520,13 @@ def main():
         run_sh_file(
             cgi_file, i_file, o_file, input_enc, lex="MW",
             us="f", output_encoding=output_enc,
-            segmentation_mode=seg_mode, stemmer="t"
+            segmentation_mode=seg_mode, text_type=txt_type, stemmer="t"
         )
     elif args.input_text:
         res = run_sh_text(
             cgi_file, args.input_text, input_enc, lex="MW",
             us="f", output_encoding=output_enc,
-            segmentation_mode=seg_mode, stemmer="t"
+            segmentation_mode=seg_mode, text_type=txt_type, stemmer="t"
         )
         if args.output_file:
             with open(args.output_file.name, 'w', encoding='utf-8') as o_file:
