@@ -318,7 +318,45 @@ def handle_result(result, input_word, output_enc, issue, text_type):
     return morph_analysis
 
 
-def run_sh_text(cgi_file, input_word, input_encoding, lex="MW",
+def merge_sent_analyses(sub_sent_analysis_lst, output_encoding):
+    """ """
+    
+    input_sent = []
+    status = []
+    segmentation = []
+    morph = []
+    
+    for sub_sent_analysis in sub_sent_analysis_lst:
+        cur_input = sub_sent_analysis.get("input", "")
+        cur_status = sub_sent_analysis.get("status", "")
+        cur_segmentation = sub_sent_analysis.get("segmentation", [])
+        cur_morph = sub_sent_analysis.get("morph", "")
+        
+        input_sent.append(cur_input)
+        status.append(cur_status)
+        segmentation += cur_segmentation
+        morph += cur_morph
+    
+    full_stop_dict = {
+        "deva": " । ", "wx" : " . ", "roma": " . ",
+    }
+    
+    full_stop = full_stop_dict.get(output_encoding, " . ")
+    
+    merged_analysis = {}
+    merged_analysis["input"] = full_stop.join(input_sent)
+    
+    status_val = "success" if "success" in status else "failure"
+    merged_analysis["status"] = status_val
+    
+    merged_analysis["segmentation"] = [] if not segmentation else [ full_stop.join(segmentation) ]
+    merged_analysis["morph"] = morph
+    merged_analysis["source"] = "SH"
+    
+    return merged_analysis
+
+
+def run_sh_text(cgi_file, input_sent, input_encoding, lex="MW",
                 us="f", output_encoding="roma",
                 segmentation_mode="b", text_type="t", stemmer="t"):
     """ Handles morphological analyses for the given input word
@@ -330,26 +368,33 @@ def run_sh_text(cgi_file, input_word, input_encoding, lex="MW",
     # word by ignoring the special characters.  
     
     issue = ""
-    input_word_out_enc = input_word
+    input_sent_out_enc = input_sent
 
-    try:
-        i_word = handle_input(input_word.strip(), input_encoding)
-        trans_input, trans_enc = input_transliteration(i_word, input_encoding)
-        input_word_out_enc = output_transliteration(trans_input, output_encoding)[0]
-
-        result, issue = run_sh(
-            cgi_file, trans_input, trans_enc, lex, us, output_encoding, 
-            segmentation_mode, text_type, stemmer
-        )
-    except Exception as e:
-        result = ""
-        issue = e
+    i_word = handle_input(input_sent.strip(), input_encoding)
+    trans_input, trans_enc = input_transliteration(i_word, input_encoding)
     
-    morph_analysis = handle_result(
-        result, input_word_out_enc, output_encoding, issue, text_type
-    )
-
-    return morph_analysis
+    sub_sent_list = trans_input.split(".")
+    sub_sent_analysis_lst = []
+    for sub_sent in sub_sent_list:
+        try:
+            result, issue = run_sh(
+                cgi_file, sub_sent.strip(), trans_enc, lex, us, output_encoding, 
+                segmentation_mode, text_type, stemmer
+            )
+        except Exception as e:
+            result = ""
+            issue = e
+        
+        input_sent_out_enc = output_transliteration(sub_sent.strip(), output_encoding)[0]
+        
+        sub_sent_analysis = handle_result(
+            result, input_sent_out_enc, output_encoding, issue, text_type
+        )
+        sub_sent_analysis_lst.append(sub_sent_analysis)
+    
+    sent_analysis = merge_sent_analyses(sub_sent_analysis_lst, output_encoding)
+    
+    return sent_analysis
 
 
 def process_words_subset(input_list, cgi_file, input_encoding, lex, us,
@@ -361,7 +406,7 @@ def process_words_subset(input_list, cgi_file, input_encoding, lex, us,
     for input_word in input_list[start:end]:
         res = run_sh_text(
             cgi_file, input_word, input_encoding, lex, us, output_encoding,
-            segmentation_mode, stemmer
+            segmentation_mode, text_type, stemmer
         )
         results.append(res)
     
@@ -407,18 +452,12 @@ def run_sh_sequentially(input_list, cgi_file, input_encoding, lex, us,
     for i in tqdm(range(len(input_list))):
         input_sent = input_list[i].strip()
         
-        trans_input, trans_enc = input_transliteration(input_sent, input_encoding)
-        sub_sent_list = trans_input.split(".")
+        sent_analysis = run_sh_text(
+            cgi_file, input_sent, input_encoding, lex, us, output_encoding,
+            segmentation_mode, text_type, stemmer
+        )
         
-        sub_sent_analysis_lst = []
-        for sub_sent in sub_sent_list:
-            sub_sent_analysis = run_sh_text(
-                cgi_file, sub_sent, trans_enc, lex, us, output_encoding,
-                segmentation_mode, text_type, stemmer
-            )
-            sub_sent_analysis_lst.append(sub_sent_analysis)
-        
-        output_list.append(sub_sent_analysis_lst)
+        output_list.append(sent_analysis)
     
     return output_list
 
