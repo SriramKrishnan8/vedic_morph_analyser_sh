@@ -7,6 +7,8 @@ import subprocess as sp
 import argparse
 import multiprocessing as mp
 
+import psutil
+
 import re
 import json
 from tqdm import tqdm
@@ -58,7 +60,7 @@ def handle_input(input_text, input_encoding):
 
     # Replace special characters with " " since Heritage Segmenter
     # does not accept special characters except "|", "!", "."
-    modified_input = re.sub(r'[$@#%&*()\[\]=+:;"}{?/,\\]', ' ', modified_input)
+    modified_input = re.sub(r'[$@#%&*()\[\]=+:;"}{?/,\\-]', ' ', modified_input)
     if not (input_encoding == "RN"):
         modified_input = modified_input.replace("'", " ")
     
@@ -287,7 +289,7 @@ def handle_result(result, input_word, output_enc, issue, text_type):
     if seg:
         if "error" in seg[0]:
             status = "Error"
-        elif "#" in seg[0] and text_type == "w":
+        elif ("#" in seg[0] or "?" in seg[0]) and text_type == "w":
             status = "Unrecognized"
         else:
             status = "Success"
@@ -302,7 +304,13 @@ def handle_result(result, input_word, output_enc, issue, text_type):
 
     morph_analysis = {}
     
-    if status in ["Failure", "Timeout", "Unknown Anomaly"]:
+    if status == "Timeout":
+        morph_analysis["input"] = input_word
+        morph_analysis["status"] = "timeout"
+    elif status == "Unknown Anomaly":
+        morph_analysis["input"] = input_word
+        morph_analysis["status"] = issue
+    elif status == "Failure":
         morph_analysis["input"] = input_word
         morph_analysis["status"] = "failed"
     elif status == "Error":
@@ -346,7 +354,8 @@ def merge_sent_analyses(sub_sent_analysis_lst, output_encoding):
     merged_analysis = {}
     merged_analysis["input"] = full_stop.join(input_sent)
     
-    status_val = "success" if "success" in status else "failure"
+#    status_val = "success" if "success" in status else "failure"
+    status_val = "success" if "success" in status else status[0]
     merged_analysis["status"] = status_val
     
     merged_analysis["segmentation"] = [] if not segmentation else [ full_stop.join(segmentation) ]
