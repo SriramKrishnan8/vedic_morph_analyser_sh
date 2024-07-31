@@ -289,37 +289,46 @@ def handle_result(result, input_word, output_enc, issue, text_type):
     if seg:
         if "error" in seg[0]:
             status = "Error"
-        elif ("#" in seg[0] or "?" in seg[0]) and text_type == "w":
+            message = seg[0]
+        elif ("#" in seg[0] or "?" in seg[0]) and (text_type == "w" or " " not in seg[0]):
             status = "Unrecognized"
+            message = "SH could not recognized at least on chunk / word"
         else:
             status = "Success"
     else:
         if issue == "Timeout":
             status = "Timeout"
+            message = "SH could not produce the response within 30s"
         elif issue == "input":
             status = "Error"
-            seg = ["Error in Input / Output Convention. Please check the input"]
+#            seg = ["Error in Input / Output Convention. Please check the input"]
+            message = "Error in Input / Output Convention. Please check the input"
         else:
             status = "Unknown Anomaly"
+            message = "An unknown error occurred"
 
     morph_analysis = {}
     
     if status == "Timeout":
         morph_analysis["input"] = input_word
         morph_analysis["status"] = "timeout"
+        morph_analysis["error"] = message
     elif status == "Unknown Anomaly":
         morph_analysis["input"] = input_word
         morph_analysis["status"] = issue
+        morph_analysis["error"] = message
     elif status == "Failure":
         morph_analysis["input"] = input_word
         morph_analysis["status"] = "failed"
+        morph_analysis["error"] = message
     elif status == "Error":
         morph_analysis["input"] = input_word
         morph_analysis["status"] = "error"
-        morph_analysis["error"] = seg[0]
+        morph_analysis["error"] = message
     elif status == "Unrecognized":
         morph_analysis["input"] = input_word
         morph_analysis["status"] = "unrecognized"
+        morph_analysis["error"] = message
     else: # Success
         morph_analysis = get_morphological_analyses(input_word, result_json, output_enc)
     
@@ -333,17 +342,20 @@ def merge_sent_analyses(sub_sent_analysis_lst, output_encoding):
     status = []
     segmentation = []
     morph = []
+    err = []
     
     for sub_sent_analysis in sub_sent_analysis_lst:
         cur_input = sub_sent_analysis.get("input", "")
         cur_status = sub_sent_analysis.get("status", "")
         cur_segmentation = sub_sent_analysis.get("segmentation", [])
-        cur_morph = sub_sent_analysis.get("morph", "")
+        cur_morph = sub_sent_analysis.get("morph", [])
+        cur_err = sub_sent_analysis.get("error", "")
         
         input_sent.append(cur_input)
         status.append(cur_status)
         segmentation += cur_segmentation
         morph += cur_morph
+        err.append(cur_err)
     
     full_stop_dict = {
         "deva": " । ", "wx" : " . ", "roma": " . ",
@@ -360,6 +372,7 @@ def merge_sent_analyses(sub_sent_analysis_lst, output_encoding):
     
     merged_analysis["segmentation"] = [] if not segmentation else [ full_stop.join(segmentation) ]
     merged_analysis["morph"] = morph
+    merged_analysis["error"] = ";".join(err)
     merged_analysis["source"] = "SH"
     
     return merged_analysis
