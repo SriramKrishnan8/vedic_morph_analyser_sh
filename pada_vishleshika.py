@@ -3,6 +3,7 @@
 import os
 import sys
 import subprocess as sp
+import psutil
 
 import argparse
 import multiprocessing as mp
@@ -28,6 +29,11 @@ text_types = {
 }
 
 cgi_file = "./interface2"
+# If Sanskrit Heritage Platform is already installed, 
+# uncomment the following and replace with your cgi bin path
+# cgi_file = "/usr/lib/cgi-bin/SKT_Experimental/sktgraph2"
+
+time_out = 30
 
 
 def remove_svaras(text):
@@ -91,11 +97,13 @@ def input_transliteration(input_text, input_enc):
     trans_enc = ""
     
     if input_enc == "DN":
-        trans_input = dt.dev2wx(input_text)
+        trans_input = dt.slp2wx(dt.dev2slp(input_text))
+        trans_input = trans_input.replace("ळ्", "d")
         trans_input = trans_input.replace("ळ", "d")
+        trans_input = trans_input.replace("kdp", "kLp")
         trans_enc = "WX"
     elif input_enc == "RN":
-        trans_input = dt.iast2wx(input_text)
+        trans_input = dt.slp2wx(dt.iast2slp(input_text))
         trans_enc = "WX"
     else:
         trans_input = input_text
@@ -121,12 +129,12 @@ def output_transliteration(output_text, output_enc):
     trans_enc = ""
     
     if output_enc == "deva":
-        trans_out = dt.wx2dev(output_text)
+        trans_output = dt.slp2dev(dt.wx2slp(output_text))
         num_map = str.maketrans('०१२३४५६७८९', '0123456789')
-        trans_output = trans_out.translate(num_map)
+        trans_output = trans_output.translate(num_map)
         trans_enc = "deva"
     elif output_enc == "roma":
-        trans_output = dt.wx2iast(output_text)
+        trans_output = dt.slp2iast(dt.wx2slp(output_text))
         trans_enc = "roma"
     else:
         trans_output = output_text
@@ -141,8 +149,6 @@ def run_sh(cgi_file, input_text, input_encoding, lex="MW", us="f",
         
         Returns a JSON
     """
-    
-    time_out = 30
     
     out_enc = output_encoding if output_encoding in ["roma", "deva"] else "roma"
     
@@ -265,53 +271,78 @@ def get_morphological_analyses(input_out_enc, result_json, out_enc):
     return analysis_json
     
 
-def handle_result(result, input_word, output_enc, issue, text_type):
-    """ Returns the results from the JSON
-    """
+def extract_result(result):
+    """ Extracts Result as JSON
+    """ 
     
     result_json = {}
-    status = "Failure"
-
-    # print(result)
-
+    
     if result:
         try:
             result_str = result.split("\n")[-1]
             result_json = json.loads(result_str)
-        except e:
+        except Exception as e:
             result_json = {}
     
+    return result_json
+
+
+def handle_result(result, input_word, output_enc, issue, text_type):
+    """ Returns the results from the JSON
+    """
+    
+    status = "Failure"
+
+    # print(result)
+
+    result_json = extract_result(result)
+
     seg = result_json.get("segmentation", [])
     morphs = result_json.get("morph", [])
 
     if seg:
         if "error" in seg[0]:
             status = "Error"
-        elif "#" in seg[0] and text_type == "w":
+            message = seg[0]
+        elif ("#" in seg[0] or "?" in seg[0]) and (text_type == "w" or " " not in seg[0]):
             status = "Unrecognized"
+            message = "SH could not recognize at least on chunk / word"
         else:
             status = "Success"
     else:
         if issue == "Timeout":
             status = "Timeout"
+            message = "SH could not produce the response within " + str(time_out) + "s"
         elif issue == "input":
             status = "Error"
-            seg = ["Error in Input / Output Convention. Please check the input"]
+#            seg = ["Error in Input / Output Convention. Please check the input"]
+            message = "Error in Input / Output Convention. Please check the input"
         else:
             status = "Unknown Anomaly"
+            message = "An unknown error occurred"
 
     morph_analysis = {}
     
-    if status in ["Failure", "Timeout", "Unknown Anomaly"]:
+    if status == "Timeout":
+        morph_analysis["input"] = input_word
+        morph_analysis["status"] = "timeout"
+        morph_analysis["error"] = message
+    elif status == "Unknown Anomaly":
+        morph_analysis["input"] = input_word
+        morph_analysis["status"] = issue
+        morph_analysis["error"] = message
+    elif status == "Failure":
         morph_analysis["input"] = input_word
         morph_analysis["status"] = "failed"
+        morph_analysis["error"] = message
     elif status == "Error":
         morph_analysis["input"] = input_word
         morph_analysis["status"] = "error"
-        morph_analysis["error"] = seg[0]
+        morph_analysis["error"] = message
     elif status == "Unrecognized":
         morph_analysis["input"] = input_word
         morph_analysis["status"] = "unrecognized"
+        morph_analysis["error"] = message
     else: # Success
         morph_analysis = get_morphological_analyses(input_word, result_json, output_enc)
     
@@ -354,14 +385,14 @@ def run_sh_text(cgi_file, input_word, input_encoding, lex="MW",
 
 def process_words_subset(input_list, cgi_file, input_encoding, lex, us,
                         output_encoding, segmentation_mode, stemmer,
-                        start, end, result_queue):
+                        text_type, start, end, result_queue):
     """ """
     
     results = []
     for input_word in input_list[start:end]:
         res = run_sh_text(
             cgi_file, input_word, input_encoding, lex, us, output_encoding,
-            segmentation_mode, stemmer
+            segmentation_mode, text_type, stemmer
         )
         results.append(res)
     
