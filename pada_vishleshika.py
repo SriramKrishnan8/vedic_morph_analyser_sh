@@ -31,7 +31,7 @@ text_types = {
 cgi_file = "./interface2"
 # If Sanskrit Heritage Platform is already installed, 
 # uncomment the following and replace with your cgi bin path
-# cgi_file = "/usr/lib/cgi-bin/SKT_Experimental/sktgraph2"
+# cgi_file = "/usr/lib/cgi-bin/SKT/sktgraph2"
 
 time_out = 30
 
