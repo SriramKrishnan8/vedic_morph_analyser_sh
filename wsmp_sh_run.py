@@ -72,13 +72,13 @@ def main():
         i_file = args.input_file.name
         o_file = args.output_file.name if args.output_file else "output.txt"
         run_sh_file(
-            cgi_file, i_file, o_file, input_enc, lex="MW",
+            i_file, o_file, input_enc, lex="MW",
             us="f", output_encoding=output_enc,
             segmentation_mode=seg_mode, text_type=txt_type, stemmer="t"
         )
     elif args.input_text:
         res = run_sh_text(
-            cgi_file, args.input_text, input_enc, lex="MW",
+            args.input_text, input_enc, lex="MW",
             us="f", output_encoding=output_enc,
             segmentation_mode=seg_mode, text_type=txt_type, stemmer="t"
         )

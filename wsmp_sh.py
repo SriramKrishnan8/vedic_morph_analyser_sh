@@ -29,7 +29,7 @@ text_types = {
     "sent" : "t"
 }
 
-cgi_file = "./interface2"
+cgi_file = os.path.join(os.path.dirname(__file__), "interface2")
 # If Sanskrit Heritage Platform is already installed, 
 # uncomment the following and replace with your cgi bin path
 # cgi_file = "/usr/lib/cgi-bin/SKT/sktgraph2"
@@ -131,6 +131,8 @@ def output_transliteration(output_text, output_enc):
     
     if output_enc == "deva":
         trans_output = dt.slp2dev(dt.wx2slp(output_text))
+        # NOTE: WX 2 SLP conversion of double avagraha results into ''.
+        # Fix it
         num_map = str.maketrans('०१२३४५६७८९', '0123456789')
         trans_output = trans_output.translate(num_map)
         trans_enc = "deva"
@@ -144,7 +146,7 @@ def output_transliteration(output_text, output_enc):
     return (trans_output, trans_enc)
 
 
-def run_sh(cgi_file, input_text, input_encoding, lex="MW", us="f",
+def run_sh(input_text, input_encoding, lex="MW", us="f",
            output_encoding="roma", segmentation_mode="b", text_type="t", stemmer="t"):
     """ Runs the cgi file with a given word.  
         
@@ -164,11 +166,21 @@ def run_sh(cgi_file, input_text, input_encoding, lex="MW", us="f",
         "stemmer=" + stemmer
     ]
     
+    # Set the directory for the subprocess to the directory of cgi_file
+    working_dir = os.path.dirname(cgi_file)
+    
     query_string = "QUERY_STRING=\"" + "&".join(env_vars) + "\""
     command = query_string + " " + cgi_file
     
     try:
-        p = sp.Popen(command, stdout=sp.PIPE, stderr=sp.PIPE, shell=True)
+        p = sp.Popen(
+            command,
+            stdout=sp.PIPE,
+            stderr=sp.PIPE,
+            shell=True,
+            cwd=working_dir  # Set working directory to access vedic/data
+        )
+        
         outs, errs = p.communicate(timeout=time_out)
     except sp.TimeoutExpired:
         parent = psutil.Process(p.pid)
@@ -401,7 +413,7 @@ def merge_sent_analyses(sub_sent_analysis_lst, output_encoding):
     return merged_analysis
 
 
-def run_sh_text(cgi_file, input_sent, input_encoding, lex="MW",
+def run_sh_text(input_sent, input_encoding, lex="MW",
                 us="f", output_encoding="roma",
                 segmentation_mode="b", text_type="t", stemmer="t"):
     """ Handles morphological analyses for the given input word
@@ -423,7 +435,7 @@ def run_sh_text(cgi_file, input_sent, input_encoding, lex="MW",
     for sub_sent in sub_sent_list:
         try:
             result, issue = run_sh(
-                cgi_file, sub_sent.strip(), trans_enc, lex, us, output_encoding, 
+                sub_sent.strip(), trans_enc, lex, us, output_encoding, 
                 segmentation_mode, text_type, stemmer
             )
         except Exception as e:
@@ -442,7 +454,7 @@ def run_sh_text(cgi_file, input_sent, input_encoding, lex="MW",
     return sent_analysis
 
 
-def process_words_subset(input_list, cgi_file, input_encoding, lex, us,
+def process_words_subset(input_list, input_encoding, lex, us,
                         output_encoding, segmentation_mode, stemmer, text_type,
                         start, end, result_queue):
     """ """
@@ -450,7 +462,7 @@ def process_words_subset(input_list, cgi_file, input_encoding, lex, us,
     results = []
     for input_word in input_list[start:end]:
         res = run_sh_text(
-            cgi_file, input_word, input_encoding, lex, us, output_encoding,
+            input_word, input_encoding, lex, us, output_encoding,
             segmentation_mode, text_type, stemmer
         )
         results.append(res)
@@ -458,7 +470,7 @@ def process_words_subset(input_list, cgi_file, input_encoding, lex, us,
     result_queue.put(results)
 
 
-def run_sh_parallely(input_list, cgi_file, input_encoding, lex, us,
+def run_sh_parallely(input_list, input_encoding, lex, us,
                      output_encoding, segmentation_mode, text_type, stemmer):
     """ """
     
@@ -472,7 +484,7 @@ def run_sh_parallely(input_list, cgi_file, input_encoding, lex, us,
     processes = []
     for chunk in chunks:
         cur_args = (
-            chunk, cgi_file, input_encoding, lex, us, output_encoding,
+            chunk, input_encoding, lex, us, output_encoding,
             segmentation_mode, text_type, stemmer, 0, len(chunk), result_queue
         )
         process = mp.Process(target=process_words_subset, args=cur_args)
@@ -489,7 +501,7 @@ def run_sh_parallely(input_list, cgi_file, input_encoding, lex, us,
     return results
     
 
-def run_sh_sequentially(input_list, cgi_file, input_encoding, lex, us,
+def run_sh_sequentially(input_list, input_encoding, lex, us,
                         output_encoding, segmentation_mode, text_type, stemmer):
     """ """
     
@@ -498,7 +510,7 @@ def run_sh_sequentially(input_list, cgi_file, input_encoding, lex, us,
         input_sent = input_list[i].strip()
         
         sent_analysis = run_sh_text(
-            cgi_file, input_sent, input_encoding, lex, us, output_encoding,
+            input_sent, input_encoding, lex, us, output_encoding,
             segmentation_mode, text_type, stemmer
         )
         
@@ -507,7 +519,7 @@ def run_sh_sequentially(input_list, cgi_file, input_encoding, lex, us,
     return output_list
 
 
-def run_sh_file(cgi_file, input_file, output_file, input_encoding, lex="MW",
+def run_sh_file(input_file, output_file, input_encoding, lex="MW",
                 us="f", output_encoding="roma", segmentation_mode="b",
                 text_type="t", stemmer="t"):
     """ Handles morphological analyses for all the sentences in a file
@@ -534,12 +546,12 @@ def run_sh_file(cgi_file, input_file, output_file, input_encoding, lex="MW",
     
     if parallel:
         output_list = run_sh_parallely(
-            input_list, cgi_file, input_encoding, lex, us, output_encoding,
+            input_list, input_encoding, lex, us, output_encoding,
             segmentation_mode, text_type, stemmer
         )
     else:
         output_list = run_sh_sequentially(
-            input_list, cgi_file, input_encoding, lex, us, output_encoding,
+            input_list, input_encoding, lex, us, output_encoding,
             segmentation_mode, text_type, stemmer
         )
     
