@@ -292,9 +292,7 @@ def handle_result(result, input_word, output_enc, issue, text_type):
     """
     
     status = "Failure"
-
-    # print(result)
-
+    
     result_json = extract_result(result)
 
     seg = result_json.get("segmentation", [])

@@ -305,9 +305,7 @@ def handle_result(result, input_word, output_enc, issue, text_type):
     """
     
     status = "Failure"
-
-    # print(result)
-
+    
     result_json = extract_result(result)
     
     seg = result_json.get("segmentation", [])
@@ -317,9 +315,9 @@ def handle_result(result, input_word, output_enc, issue, text_type):
         if "error" in seg[0]:
             status = "Error"
             message = seg[0]
-        elif ("#" in seg[0] or "?" in seg[0]) and (text_type == "w" or " " not in seg[0]):
+        elif ("#" in seg[0] or "?" in seg[0]) and (text_type == "f" or " " not in seg[0]):
             status = "Unrecognized"
-            message = "SH could not recognize at least on chunk / word"
+            message = "SH could not recognize at least one chunk / word"
         else:
             status = "Success"
     else:
@@ -413,10 +411,39 @@ def merge_sent_analyses(sub_sent_analysis_lst, output_encoding):
     return merged_analysis
 
 
-def run_sh_text(input_sent, input_encoding, lex="MW",
+def run_sh_morph_analysis(input_word, input_encoding, lex="MW",
                 us="f", output_encoding="roma",
                 segmentation_mode="b", text_type="t", stemmer="t"):
     """ Handles morphological analyses for the given input word
+    """
+    
+    issue = ""
+    input_word_out_enc = input_word
+
+    try:
+        i_word = handle_input(input_word.strip(), input_encoding)
+        trans_input, trans_enc = input_transliteration(i_word, input_encoding)
+        input_word_out_enc = output_transliteration(trans_input, output_encoding)[0]
+
+        result, issue = run_sh(
+            trans_input, trans_enc, lex, us, output_encoding, 
+            segmentation_mode, text_type, stemmer
+        )
+    except Exception as e:
+        result = ""
+        issue = str(e)
+    
+    morph_analysis = handle_result(
+        result, input_word_out_enc, output_encoding, issue, text_type
+    )
+
+    return morph_analysis
+
+
+def run_sh_text(input_sent, input_encoding, lex="MW",
+                us="f", output_encoding="roma",
+                segmentation_mode="b", text_type="t", stemmer="t"):
+    """ Handles segmenation and morphological analyses for the given input word
     """
     
     # SH does not accept special characters in the input sequence.  
@@ -440,7 +467,7 @@ def run_sh_text(input_sent, input_encoding, lex="MW",
             )
         except Exception as e:
             result = ""
-            issue = e
+            issue = str(e)
         
         input_sent_out_enc = output_transliteration(sub_sent.strip(), output_encoding)[0]
         
