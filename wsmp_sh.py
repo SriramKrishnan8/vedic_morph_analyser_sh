@@ -9,6 +9,8 @@ import multiprocessing as mp
 
 import psutil
 
+from itertools import product, islice
+
 import re
 import json
 from tqdm import tqdm
@@ -360,12 +362,12 @@ def handle_result(result, input_word, output_enc, issue, text_type):
     return morph_analysis
 
 
-def merge_sent_analyses(sub_sent_analysis_lst, output_encoding):
+def merge_sent_analyses(sub_sent_analysis_lst, output_encoding, segmentation_mode):
     """ """
     
     input_sent = []
     status = []
-    segmentation = []
+    all_segmentations = []   # will hold the list of lists of segmentations
     morph = []
     err = []
     
@@ -379,7 +381,7 @@ def merge_sent_analyses(sub_sent_analysis_lst, output_encoding):
         
         input_sent.append(cur_input)
         status.append(cur_status)
-        segmentation += cur_segmentation
+        all_segmentations.append(cur_segmentation)  # keep as separate lists
         morph += cur_morph
         
         if cur_err:
@@ -390,6 +392,7 @@ def merge_sent_analyses(sub_sent_analysis_lst, output_encoding):
 
         i += 1
     
+    # full stop based on the output encoding
     full_stop_dict = {
         "deva": " । ", "wx" : " . ", "roma": " . ",
     }
@@ -399,11 +402,31 @@ def merge_sent_analyses(sub_sent_analysis_lst, output_encoding):
     merged_analysis = {}
     merged_analysis["input"] = full_stop.join(input_sent)
     
-#    status_val = "success" if "success" in status else "failure"
+    # status_val = "success" if "success" in status else "failure"
     status_val = "success" if "success" in status else status[0]
     merged_analysis["status"] = status_val
     
-    merged_analysis["segmentation"] = [] if not segmentation else [ full_stop.join(segmentation) ]
+    # Streaming Segmentations
+    # def segmentation_generator():
+    #     if all_segmentations and all(s for s in all_segmentations):
+    #         for comb in product(*all_segmentations):
+    #             yield full_stop.join(comb)
+    #
+    # merged_analysis["segmentation"] = segmentation_generator()  # generator
+    
+    # ---- FIXED SEGMENTATION PART ----
+    if all_segmentations and all(s for s in all_segmentations):
+        # Cartesian product of all segmentation lists
+        num_solutions = 1 if segmentation_mode in [ "s", "f" ] else 10
+        
+        merged_segmentation = [
+            full_stop.join(comb)
+            for comb in islice(product(*all_segmentations), num_solutions)
+        ]
+    else:
+        merged_segmentation = []
+    
+    merged_analysis["segmentation"] = merged_segmentation
     merged_analysis["morph"] = morph
     merged_analysis["error"] = ";".join(err)
     merged_analysis["source"] = "SH"
@@ -476,7 +499,7 @@ def run_sh_text(input_sent, input_encoding, lex="MW",
         )
         sub_sent_analysis_lst.append(sub_sent_analysis)
     
-    sent_analysis = merge_sent_analyses(sub_sent_analysis_lst, output_encoding)
+    sent_analysis = merge_sent_analyses(sub_sent_analysis_lst, output_encoding, segmentation_mode)
     
     return sent_analysis
 
@@ -555,7 +578,7 @@ def run_sh_file(input_file, output_file, input_encoding, lex="MW",
     try:
         ifile = open(input_file, 'r', encoding='utf-8')
     except OSError as e:
-        print(f"Unable to open {path}: {e}", file=sys.stderr)
+        print(f"Unable to open {input_file}: {e}", file=sys.stderr)
         sys.exit(1)
         
     input_text = ifile.read()
